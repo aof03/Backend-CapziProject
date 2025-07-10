@@ -1,3 +1,227 @@
+/**
+ * @swagger
+ * tags:
+ *   name: Ride
+ *   description: ระบบจัดการการเดินทางและการชำระเงิน
+ */
+
+/**
+ * @swagger
+ * /confirm-cash/{rideId}:
+ *   patch:
+ *     summary: ยืนยันชำระเงินแบบเงินสด (เฉพาะคนขับ)
+ *     tags: [Ride]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: rideId
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: ไอดีของรายการเดินทางที่ต้องการยืนยันชำระเงิน
+ *     responses:
+ *       200:
+ *         description: ยืนยันรับเงินสดเรียบร้อย พร้อมข้อมูล ride ล่าสุด
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: ยืนยันรับเงินสดเรียบร้อย
+ *                 ride:
+ *                   type: object
+ *                   properties:
+ *                     _id:
+ *                       type: string
+ *                       example: 60d0fe4f5311236168a109cb
+ *                     paymentMethod:
+ *                       type: string
+ *                       example: cash
+ *                     paymentStatus:
+ *                       type: string
+ *                       example: paid
+ *                     fare:
+ *                       type: number
+ *                       example: 150
+ *                     // ... properties ของ ride model อื่น ๆ ตามจริง
+ *       400:
+ *         description: ไม่ใช่เงินสด
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: ไม่ใช่เงินสด
+ *       401:
+ *         description: ไม่ได้เข้าสู่ระบบ หรือไม่ใช่คนขับ
+ *       404:
+ *         description: ไม่พบรายการเดินทาง
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: ไม่พบรายการเดินทาง
+ *       500:
+ *         description: ไม่สามารถยืนยันการชำระเงินได้ (server error)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: ไม่สามารถยืนยันการชำระเงินได้
+ */
+
+/**
+ * @swagger
+ * /generate-qr/{rideId}:
+ *   post:
+ *     summary: สร้าง QR Code หรือ PromptPay Link สำหรับการชำระเงิน (จำลอง)
+ *     tags: [Ride]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: rideId
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: ไอดีของรายการเดินทาง
+ *     requestBody:
+ *       description: ระบุวิธีการชำระเงิน (promptpay หรือ qr)
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - method
+ *             properties:
+ *               method:
+ *                 type: string
+ *                 example: promptpay
+ *     responses:
+ *       200:
+ *         description: สร้างลิงก์ QR Code สำเร็จ
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: สร้างลิงก์ promptpay สำเร็จ
+ *                 paymentLink:
+ *                   type: string
+ *                   example: https://fake-payment-provider.com/pay?rideId=60d0fe4f5311236168a109cb&method=promptpay&amount=150
+ *                 fare:
+ *                   type: number
+ *                   example: 150
+ *       404:
+ *         description: ไม่พบรายการเดินทาง
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: ไม่พบรายการเดินทาง
+ *       500:
+ *         description: เกิดข้อผิดพลาดในการสร้าง QR
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: เกิดข้อผิดพลาดในการสร้าง QR
+ */
+
+/**
+ * @swagger
+ * /wallet/{rideId}:
+ *   patch:
+ *     summary: ยืนยันการชำระเงินผ่าน Wallet (จำลอง)
+ *     tags: [Ride]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: rideId
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: ไอดีของรายการเดินทาง
+ *     responses:
+ *       200:
+ *         description: ชำระผ่าน Wallet สำเร็จ พร้อมข้อมูล ride ล่าสุด
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: ชำระผ่าน Wallet สำเร็จ
+ *                 ride:
+ *                   type: object
+ *                   properties:
+ *                     _id:
+ *                       type: string
+ *                       example: 60d0fe4f5311236168a109cb
+ *                     paymentMethod:
+ *                       type: string
+ *                       example: wallet
+ *                     paymentStatus:
+ *                       type: string
+ *                       example: paid
+ *                     fare:
+ *                       type: number
+ *                       example: 150
+ *                     // ... properties ของ ride model อื่น ๆ ตามจริง
+ *       400:
+ *         description: ไม่ใช่ช่องทาง Wallet
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: ไม่ใช่ช่องทาง Wallet
+ *       404:
+ *         description: ไม่พบรายการเดินทาง
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: ไม่พบรายการเดินทาง
+ *       500:
+ *         description: เกิดข้อผิดพลาด (server error)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: เกิดข้อผิดพลาด
+ */
+
 const express = require("express");
 const router = express.Router();
 const Ride = require("../models/ride.model");

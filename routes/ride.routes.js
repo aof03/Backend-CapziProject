@@ -1,3 +1,551 @@
+/**
+ * @swagger
+ * tags:
+ *   name: Ride
+ *   description: ระบบเรียกรถ, จัดการการเดินทาง และชำระเงิน
+ */
+
+/**
+ * @swagger
+ * /request:
+ *   post:
+ *     summary: ลูกค้าเรียกรถใหม่
+ *     tags: [Ride]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       description: ข้อมูลการเรียกรถ
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - riderId
+ *               - pickup
+ *               - dropoff
+ *             properties:
+ *               riderId:
+ *                 type: string
+ *                 example: 60d0fe4f5311236168a109cb
+ *               pickup:
+ *                 type: object
+ *                 properties:
+ *                   lat:
+ *                     type: number
+ *                     example: 13.736717
+ *                   lng:
+ *                     type: number
+ *                     example: 100.523186
+ *               dropoff:
+ *                 type: object
+ *                 properties:
+ *                   lat:
+ *                     type: number
+ *                     example: 13.745
+ *                   lng:
+ *                     type: number
+ *                     example: 100.534
+ *               priority:
+ *                 type: boolean
+ *                 description: ความเร่งด่วน (เพิ่มค่าโดยสาร)
+ *                 example: false
+ *               promoCode:
+ *                 type: string
+ *                 description: รหัสส่วนลด (ถ้ามี)
+ *                 example: PEAKSAFE50
+ *               paymentMethod:
+ *                 type: string
+ *                 description: ช่องทางชำระเงิน
+ *                 enum: [cash, wallet, promptpay]
+ *                 example: cash
+ *     responses:
+ *       200:
+ *         description: เรียกรถสำเร็จ พร้อมข้อมูล ride
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: เรียกรถสำเร็จ
+ *                 ride:
+ *                   type: object
+ *                   properties:
+ *                     _id:
+ *                       type: string
+ *                       example: 60d0fe4f5311236168a109cb
+ *                     riderId:
+ *                       type: string
+ *                       example: 60d0fe4f5311236168a109cb
+ *                     pickup:
+ *                       type: object
+ *                       properties:
+ *                         lat:
+ *                           type: number
+ *                           example: 13.736717
+ *                         lng:
+ *                           type: number
+ *                           example: 100.523186
+ *                     dropoff:
+ *                       type: object
+ *                       properties:
+ *                         lat:
+ *                           type: number
+ *                           example: 13.745
+ *                         lng:
+ *                           type: number
+ *                           example: 100.534
+ *                     fare:
+ *                       type: number
+ *                       example: 60
+ *                     priority:
+ *                       type: boolean
+ *                       example: false
+ *                     promoCode:
+ *                       type: string
+ *                       example: PEAKSAFE50
+ *                     status:
+ *                       type: string
+ *                       example: requested
+ *                     paymentMethod:
+ *                       type: string
+ *                       example: cash
+ *                     paymentStatus:
+ *                       type: string
+ *                       example: pending
+ *       400:
+ *         description: ข้อมูลเรียกรถไม่ครบถ้วนหรือผิดพลาด
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: เรียกรถไม่สำเร็จ
+ *       401:
+ *         description: ไม่ได้เข้าสู่ระบบ
+ *       403:
+ *         description: สิทธิ์ผู้ใช้ไม่ถูกต้อง
+ *       500:
+ *         description: เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์
+ */
+
+/**
+ * @swagger
+ * /accept:
+ *   post:
+ *     summary: คนขับรับงานเรียกรถ
+ *     tags: [Ride]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       description: ข้อมูลรับงาน
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - rideId
+ *               - driverId
+ *             properties:
+ *               rideId:
+ *                 type: string
+ *                 example: 60d0fe4f5311236168a109cb
+ *               driverId:
+ *                 type: string
+ *                 example: 60d0fe4f5311236168a109cd
+ *     responses:
+ *       200:
+ *         description: รับงานสำเร็จ พร้อมข้อมูล ride ที่อัปเดต
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: รับงานของคุณ ลูกค้า สำเร็จ
+ *                 ride:
+ *                   type: object
+ *       404:
+ *         description: ไม่พบคำขอเรียกรถ
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: ไม่พบคำขอเรียกรถ
+ *       500:
+ *         description: รับงานไม่สำเร็จ
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: รับงานไม่สำเร็จ
+ */
+
+/**
+ * @swagger
+ * /reroute:
+ *   post:
+ *     summary: คนขับ reroute เปลี่ยนเส้นทางเมื่อเจอรถติด
+ *     tags: [Ride]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       description: ข้อมูล reroute
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - rideId
+ *               - currentLocation
+ *               - trafficDelayMinutes
+ *             properties:
+ *               rideId:
+ *                 type: string
+ *                 example: 60d0fe4f5311236168a109cb
+ *               currentLocation:
+ *                 type: object
+ *                 properties:
+ *                   lat:
+ *                     type: number
+ *                     example: 13.736717
+ *                   lng:
+ *                     type: number
+ *                     example: 100.523186
+ *               trafficDelayMinutes:
+ *                 type: number
+ *                 example: 10
+ *     responses:
+ *       200:
+ *         description: เปลี่ยนเส้นทางสำเร็จ หรือยังไม่ถึงเกณฑ์ reroute
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: เปลี่ยนเส้นทางสำเร็จ
+ *                 newRoute:
+ *                   type: object
+ *                   properties:
+ *                     newPath:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           lat:
+ *                             type: number
+ *                             example: 13.737
+ *                           lng:
+ *                             type: number
+ *                             example: 100.524
+ *                     extraDistance:
+ *                       type: number
+ *                       example: 1.5
+ *                 fareUnchanged:
+ *                   type: boolean
+ *                   example: true
+ *       400:
+ *         description: เส้นทางใหม่อ้อมเกินไป
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: เส้นทางใหม่อ้อมเกินไป
+ *       500:
+ *         description: เปลี่ยนเส้นทางไม่สำเร็จ
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: เปลี่ยนเส้นทางไม่สำเร็จ
+ */
+
+/**
+ * @swagger
+ * /check-traffic/{rideId}:
+ *   post:
+ *     summary: ตรวจจับสภาพจราจรด้วย Google Maps API
+ *     tags: [Ride]
+ *     parameters:
+ *       - in: path
+ *         name: rideId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ไอดีรายการเดินทาง
+ *     responses:
+ *       200:
+ *         description: ผลตรวจจับสภาพจราจร และข้อมูล ride
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: เปลี่ยนเส้นทางสำเร็จ (ไม่มีค่าใช้จ่ายเพิ่ม)
+ *                 delayMinutes:
+ *                   type: number
+ *                   example: 12
+ *                 ride:
+ *                   type: object
+ *       400:
+ *         description: ไม่พบเส้นทาง
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: ไม่พบเส้นทาง
+ *       404:
+ *         description: ไม่พบ ride
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: Ride not found
+ *       500:
+ *         description: เกิดข้อผิดพลาด
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: เกิดข้อผิดพลาด
+ */
+
+/**
+ * @swagger
+ * /complete:
+ *   post:
+ *     summary: คนขับจบงาน
+ *     tags: [Ride]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       description: ไอดีรายการเดินทาง
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - rideId
+ *             properties:
+ *               rideId:
+ *                 type: string
+ *                 example: 60d0fe4f5311236168a109cb
+ *     responses:
+ *       200:
+ *         description: จบงานสำเร็จ พร้อมข้อมูล ride ที่อัปเดต
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: จบงานเรียบร้อย
+ *                 ride:
+ *                   type: object
+ *       404:
+ *         description: ไม่พบรายการเดินทาง
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: ไม่พบรายการเดินทาง
+ *       500:
+ *         description: จบงานไม่สำเร็จ
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: จบงานไม่สำเร็จ
+ */
+
+/**
+ * @swagger
+ * /confirm-arrival:
+ *   post:
+ *     summary: ลูกค้ายืนยันถึงปลายทาง
+ *     tags: [Ride]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       description: ไอดีรายการเดินทาง
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - rideId
+ *             properties:
+ *               rideId:
+ *                 type: string
+ *                 example: 60d0fe4f5311236168a109cb
+ *     responses:
+ *       200:
+ *         description: ยืนยันถึงที่หมายสำเร็จ พร้อมข้อมูล ride ที่อัปเดต
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: ยืนยันถึงที่หมายเรียบร้อย
+ *                 ride:
+ *                   type: object
+ *       500:
+ *         description: ยืนยันไม่สำเร็จ
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: ยืนยันไม่สำเร็จ
+ */
+
+/**
+ * @swagger
+ * /confirm-payment/{rideId}:
+ *   patch:
+ *     summary: คนขับยืนยันรับเงินสด
+ *     tags: [Ride]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: rideId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ไอดีรายการเดินทาง
+ *     responses:
+ *       200:
+ *         description: ยืนยันรับเงินสดสำเร็จ พร้อมข้อมูล ride ที่อัปเดต
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: ยืนยันรับเงินสดเรียบร้อย
+ *                 ride:
+ *                   type: object
+ *       400:
+ *         description: ไม่ใช่การชำระแบบเงินสด
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: ไม่ใช่การชำระแบบเงินสด
+ *       404:
+ *         description: ไม่พบรายการเดินทาง
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: ไม่พบรายการเดินทาง
+ *       500:
+ *         description: ไม่สามารถยืนยันรับเงินสดได้
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: ไม่สามารถยืนยันรับเงินสดได้
+ */
+
+/**
+ * @swagger
+ * /history:
+ *   get:
+ *     summary: ดูประวัติการเดินทางของผู้ใช้ (ทั้ง rider และ driver)
+ *     tags: [Ride]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: รายการประวัติการเดินทาง
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 history:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       403:
+ *         description: สิทธิ์ผู้ใช้ไม่ถูกต้อง
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: อนุญาตเฉพาะผู้โดยสารหรือคนขับเท่านั้น
+ *       500:
+ *         description: เกิดข้อผิดพลาดในการดึงประวัติ
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: ไม่สามารถดึงประวัติการเดินทางได้
+ */
+
 const express = require("express");
 const router = express.Router();
 const axios = require("axios");

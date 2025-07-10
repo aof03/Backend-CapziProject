@@ -1,3 +1,156 @@
+/**
+ * @swagger
+ * tags:
+ *   name: Auth
+ *   description: ระบบการสมัครสมาชิกและล็อกอิน
+ */
+
+/**
+ * @swagger
+ * /register:
+ *   post:
+ *     summary: สมัครสมาชิก
+ *     tags: [Auth]
+ *     requestBody:
+ *       description: ข้อมูลผู้ใช้สำหรับสมัครสมาชิก
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *               - phone
+ *               - role
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 example: John Doe
+ *               phone:
+ *                 type: string
+ *                 example: "0812345678"
+ *               role:
+ *                 type: string
+ *                 example: user
+ *     responses:
+ *       200:
+ *         description: ลงทะเบียนสำเร็จ พร้อมส่ง token และข้อมูล user
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: ลงทะเบียนสำเร็จ
+ *                 token:
+ *                   type: string
+ *                 user:
+ *                   type: object
+ *                   properties:
+ *                     _id:
+ *                       type: string
+ *                       example: 60d0fe4f5311236168a109ca
+ *                     name:
+ *                       type: string
+ *                       example: John Doe
+ *                     phone:
+ *                       type: string
+ *                       example: "0812345678"
+ *                     role:
+ *                       type: string
+ *                       example: user
+ *       400:
+ *         description: เบอร์นี้ถูกใช้งานแล้ว
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: เบอร์นี้ถูกใช้งานแล้ว
+ *       500:
+ *         description: สมัครไม่สำเร็จ (server error)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: สมัครไม่สำเร็จ
+ */
+
+/**
+ * @swagger
+ * /login:
+ *   post:
+ *     summary: ล็อกอินด้วยหมายเลขโทรศัพท์
+ *     tags: [Auth]
+ *     requestBody:
+ *       description: ข้อมูลสำหรับล็อกอิน
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - phone
+ *             properties:
+ *               phone:
+ *                 type: string
+ *                 example: "0812345678"
+ *     responses:
+ *       200:
+ *         description: ล็อกอินสำเร็จ พร้อมส่ง token และข้อมูล user
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: ล็อกอินสำเร็จ
+ *                 token:
+ *                   type: string
+ *                 user:
+ *                   type: object
+ *                   properties:
+ *                     _id:
+ *                       type: string
+ *                       example: 60d0fe4f5311236168a109ca
+ *                     name:
+ *                       type: string
+ *                       example: John Doe
+ *                     phone:
+ *                       type: string
+ *                       example: "0812345678"
+ *                     role:
+ *                       type: string
+ *                       example: user
+ *       404:
+ *         description: ไม่พบผู้ใช้
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: ไม่พบผู้ใช้
+ *       500:
+ *         description: เกิดข้อผิดพลาด (server error)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: เกิดข้อผิดพลาด
+ */
+
 const express = require("express");
 const router = express.Router();
 const jwt = require("jsonwebtoken");

@@ -2,6 +2,8 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 require("dotenv").config();
+const swaggerUi = require("swagger-ui-express");
+const swaggerSpec = require("./swagger/swaggerConfig");
 
 const app = express();
 
@@ -34,6 +36,7 @@ app.use("/api/payment", require("./routes/payment.routes")); // ✅ ระบบ
 app.use("/api/rating-review", require("./routes/ratingReview.routes"));
 app.use("/api/notifications", require("./routes/notification.routes"));
 app.use("/api/chat", require("./routes/chat.routes"));
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // ✅ Fallback route (optional)
 app.get("/", (req, res) => {

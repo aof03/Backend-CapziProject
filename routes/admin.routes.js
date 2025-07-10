@@ -5,6 +5,25 @@ const Ride = require("../models/ride.model");
 const SOS = require("../models/sos.model");
 const { authenticateToken, onlyAdmin } = require("../middleware/auth.middleware");
 
+/**
+ * @swagger
+ * tags:
+ *   name: Admin
+ *   description: Admin management endpoints
+ */
+
+/**
+ * @swagger
+ * /api/admin/users:
+ *   get:
+ *     summary: ดูผู้ใช้งานทั้งหมด
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: รายชื่อผู้ใช้ทั้งหมด
+ */
 // ✅ ดูผู้ใช้งานทั้งหมด
 router.get("/users", authenticateToken, onlyAdmin, async (req, res) => {
   try {
@@ -15,6 +34,18 @@ router.get("/users", authenticateToken, onlyAdmin, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/admin/rides:
+ *   get:
+ *     summary: ดูประวัติการเดินทางทั้งหมด
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: รายการการเดินทางทั้งหมด
+ */
 // ✅ ดูประวัติการเดินทางทั้งหมด
 router.get("/rides", authenticateToken, onlyAdmin, async (req, res) => {
   try {
@@ -25,6 +56,18 @@ router.get("/rides", authenticateToken, onlyAdmin, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/admin/sos:
+ *   get:
+ *     summary: ดูรายการ SOS ทั้งหมด
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: รายการแจ้งเหตุฉุกเฉิน
+ */
 // ✅ ดูรายการ SOS ทั้งหมด
 router.get("/sos", authenticateToken, onlyAdmin, async (req, res) => {
   try {
@@ -34,7 +77,34 @@ router.get("/sos", authenticateToken, onlyAdmin, async (req, res) => {
     res.status(500).json({ error: "ไม่สามารถโหลดข้อมูล SOS ได้" });
   }
 });
-
+/**
+ * @swagger
+ * /api/admin/user/{id}/status:
+ *   patch:
+ *     summary: อัปเดตสถานะผู้ใช้ (active/suspended)
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 example: suspended
+ *     responses:
+ *       200:
+ *         description: อัปเดตสถานะสำเร็จ
+ */
 // ✅ อัปเดตสถานะผู้ใช้ (active/suspended)
 router.patch("/user/:id/status", authenticateToken, onlyAdmin, async (req, res) => {
   const { status } = req.body;
@@ -46,6 +116,18 @@ router.patch("/user/:id/status", authenticateToken, onlyAdmin, async (req, res) 
   }
 });
 
+/**
+ * @swagger
+ * /api/admin/kyc/pending:
+ *   get:
+ *     summary: ดูรายการ KYC ที่รอตรวจสอบ
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: รายชื่อคนขับที่รอการอนุมัติ KYC
+ */
 // ✅ ดูรายการ KYC ที่รอตรวจสอบ
 router.get("/kyc/pending", authenticateToken, onlyAdmin, async (req, res) => {
   try {
@@ -60,6 +142,24 @@ router.get("/kyc/pending", authenticateToken, onlyAdmin, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/admin/kyc/approve/{driverId}:
+ *   patch:
+ *     summary: อนุมัติ KYC
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: driverId
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: อนุมัติ KYC สำเร็จ
+ */
 // ✅ อนุมัติ KYC
 router.patch("/kyc/approve/:driverId", authenticateToken, onlyAdmin, async (req, res) => {
   try {
@@ -79,6 +179,24 @@ router.patch("/kyc/approve/:driverId", authenticateToken, onlyAdmin, async (req,
   }
 });
 
+/**
+ * @swagger
+ * /api/admin/kyc/reject/{driverId}:
+ *   patch:
+ *     summary: ปฏิเสธ KYC
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: driverId
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: ปฏิเสธ KYC สำเร็จและระงับบัญชี
+ */
 // ✅ ปฏิเสธ KYC
 router.patch("/kyc/reject/:driverId", authenticateToken, onlyAdmin, async (req, res) => {
   try {
