@@ -222,6 +222,15 @@
  *                   example: เกิดข้อผิดพลาด
  */
 
+/**
+ * @swagger
+ * components:
+ *   schemas:
+ *     Ride:
+ *       type: object
+ *       additionalProperties: true
+ */
+
 const express = require("express");
 const router = express.Router();
 const Ride = require("../models/ride.model");

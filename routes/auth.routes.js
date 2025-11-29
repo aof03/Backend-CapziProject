@@ -2,8 +2,24 @@
  * @swagger
  * tags:
  *   name: Auth
- *   description: ระบบการสมัครสมาชิกและล็อกอิน
+ *   description: ระบบสมัครสมาชิกและล็อกอิน
  */
+
+const express = require("express");
+const router = express.Router();
+const User = require("../models/user.model");
+const bcrypt = require("bcrypt"); // ถ้าโปรเจกต์ใช้ bcryptjs ให้เปลี่ยนเป็น "bcryptjs"
+const jwt = require("jsonwebtoken");
+const { authenticateToken } = require("../middleware/auth.middleware");
+
+// 🔐 ฟังก์ชันสร้าง Token
+const generateToken = (user) => {
+  return jwt.sign(
+    { userId: user._id, role: user.role },
+    process.env.JWT_SECRET || "secret123",
+    { expiresIn: "1d" }
+  );
+};
 
 /**
  * @swagger
@@ -21,7 +37,7 @@
  *             required:
  *               - name
  *               - phone
- *               - role
+ *               - password
  *             properties:
  *               name:
  *                 type: string
@@ -31,62 +47,66 @@
  *                 example: "0812345678"
  *               role:
  *                 type: string
- *                 example: user
+ *                 enum: [rider, driver]
+ *                 example: rider
+ *               password:
+ *                 type: string
+ *                 example: "12345678"
  *     responses:
- *       200:
- *         description: ลงทะเบียนสำเร็จ พร้อมส่ง token และข้อมูล user
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   example: ลงทะเบียนสำเร็จ
- *                 token:
- *                   type: string
- *                 user:
- *                   type: object
- *                   properties:
- *                     _id:
- *                       type: string
- *                       example: 60d0fe4f5311236168a109ca
- *                     name:
- *                       type: string
- *                       example: John Doe
- *                     phone:
- *                       type: string
- *                       example: "0812345678"
- *                     role:
- *                       type: string
- *                       example: user
+ *       201:
+ *         description: สมัครสำเร็จ พร้อมส่ง token และข้อมูล user
  *       400:
- *         description: เบอร์นี้ถูกใช้งานแล้ว
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 error:
- *                   type: string
- *                   example: เบอร์นี้ถูกใช้งานแล้ว
+ *         description: เบอร์นี้ถูกใช้งานแล้ว หรือข้อมูลไม่ครบ
  *       500:
  *         description: สมัครไม่สำเร็จ (server error)
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 error:
- *                   type: string
- *                   example: สมัครไม่สำเร็จ
  */
+router.post("/register", async (req, res) => {
+  try {
+    const { name, phone, password, role } = req.body;
+    console.log("Register payload role:", role);
+
+    if (!name || !phone || !password) {
+      return res.status(400).json({ error: "กรุณากรอก name, phone, password" });
+    }
+
+    const allowedRoles = ["rider", "driver", "admin"];
+    const normalizedRole = allowedRoles.includes(role) ? role : "rider";
+
+    const existing = await User.findOne({ phone });
+    if (existing) return res.status(409).json({ error: "เบอร์นี้ถูกใช้แล้ว" });
+
+    const hashed = await bcrypt.hash(password, 10);
+
+    const user = new User({
+      name,
+      phone,
+      password: hashed,
+      role: normalizedRole
+    });
+
+    await user.save();
+    console.log("Saved user role:", user.role);
+
+    const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, {
+      expiresIn: "7d"
+    });
+
+    return res.status(201).json({
+      message: "สมัครสำเร็จ",
+      user: { id: user._id, name: user.name, phone: user.phone, role: user.role },
+      token
+    });
+  } catch (err) {
+    console.error("Register error:", err);
+    return res.status(500).json({ error: "เซิร์ฟเวอร์ผิดพลาด" });
+  }
+});
 
 /**
  * @swagger
  * /login:
  *   post:
- *     summary: ล็อกอินด้วยหมายเลขโทรศัพท์
+ *     summary: ล็อกอินด้วยหมายเลขโทรศัพท์และรหัสผ่าน
  *     tags: [Auth]
  *     requestBody:
  *       description: ข้อมูลสำหรับล็อกอิน
@@ -97,103 +117,47 @@
  *             type: object
  *             required:
  *               - phone
+ *               - password
  *             properties:
  *               phone:
  *                 type: string
  *                 example: "0812345678"
+ *               password:
+ *                 type: string
+ *                 example: "12345678"
  *     responses:
  *       200:
  *         description: ล็อกอินสำเร็จ พร้อมส่ง token และข้อมูล user
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   example: ล็อกอินสำเร็จ
- *                 token:
- *                   type: string
- *                 user:
- *                   type: object
- *                   properties:
- *                     _id:
- *                       type: string
- *                       example: 60d0fe4f5311236168a109ca
- *                     name:
- *                       type: string
- *                       example: John Doe
- *                     phone:
- *                       type: string
- *                       example: "0812345678"
- *                     role:
- *                       type: string
- *                       example: user
+ *       400:
+ *         description: รหัสผ่านไม่ถูกต้อง
  *       404:
  *         description: ไม่พบผู้ใช้
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 error:
- *                   type: string
- *                   example: ไม่พบผู้ใช้
  *       500:
  *         description: เกิดข้อผิดพลาด (server error)
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 error:
- *                   type: string
- *                   example: เกิดข้อผิดพลาด
  */
-
-const express = require("express");
-const router = express.Router();
-const jwt = require("jsonwebtoken");
-const User = require("../models/user.model");
-
-// 🔐 ฟังก์ชันสร้าง Token
-const generateToken = (user) => {
-  return jwt.sign(
-    { userId: user._id, role: user.role },
-    process.env.JWT_SECRET,
-    { expiresIn: "1d" } // ✅ หมดอายุภายใน 1 วัน
-  );
-};
-
-// ✅ สมัครสมาชิก
-router.post("/register", async (req, res) => {
-  const { name, phone, role } = req.body;
-  try {
-    // ป้องกันเบอร์ซ้ำ
-    const existing = await User.findOne({ phone });
-    if (existing) return res.status(400).json({ error: "เบอร์นี้ถูกใช้งานแล้ว" });
-
-    const user = new User({ name, phone, role });
-    await user.save();
-
-    const token = generateToken(user);
-    res.json({ message: "ลงทะเบียนสำเร็จ", token, user });
-  } catch (err) {
-    res.status(500).json({ error: "สมัครไม่สำเร็จ" });
-  }
-});
-
-// ✅ ล็อกอิน
 router.post("/login", async (req, res) => {
-  const { phone } = req.body;
   try {
-    const user = await User.findOne({ phone });
-    if (!user) return res.status(404).json({ error: "ไม่พบผู้ใช้" });
+    const { phone, password } = req.body;
+    if (!phone || !password) return res.status(400).json({ error: "กรุณากรอก phone และ password" });
 
-    const token = generateToken(user);
-    res.json({ message: "ล็อกอินสำเร็จ", token, user });
+    const user = await User.findOne({ phone });
+    if (!user) return res.status(401).json({ error: "ไม่พบผู้ใช้" });
+
+    const match = await bcrypt.compare(password, user.password);
+    if (!match) return res.status(401).json({ error: "รหัสผ่านไม่ถูกต้อง" });
+
+    const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, {
+      expiresIn: "7d"
+    });
+
+    return res.json({
+      message: "เข้าสู่ระบบสำเร็จ",
+      user: { id: user._id, name: user.name, phone: user.phone, role: user.role },
+      token
+    });
   } catch (err) {
-    res.status(500).json({ error: "เกิดข้อผิดพลาด" });
+    console.error("Login error:", err);
+    return res.status(500).json({ error: "เซิร์ฟเวอร์ผิดพลาด" });
   }
 });
 

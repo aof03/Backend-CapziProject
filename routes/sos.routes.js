@@ -60,7 +60,7 @@
  *               properties:
  *                 message:
  *                   type: string
- *                   example: รับแจ้งเหตุแล้ว คนขับถูกระงับชั่วคราว
+ *                   example: รับแจ้งเหตุแล้ว ข้อมูลถูกบันทึก
  *                 sos:
  *                   type: object
  *                   properties:
@@ -114,26 +114,60 @@ const router = express.Router();
 const SOS = require("../models/sos.model");
 const User = require("../models/user.model");
 const { authenticateToken } = require("../middleware/auth.middleware");
+const rateLimit = require("express-rate-limit");
+const { ipKeyGenerator } = require("express-rate-limit");
+
+// สร้าง limiter ก่อนประกาศ route
+const sosLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 3,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: ipKeyGenerator, // ใช้ helper เพื่อรองรับ IPv6
+  message: { error: "คุณแจ้งเหตุ SOS มากเกินไป โปรดลองอีกครั้งภายหลัง" }
+});
 
 // ✅ แจ้งเหตุฉุกเฉิน (เฉพาะลูกค้าที่เข้าสู่ระบบ)
-router.post("/report", authenticateToken, async (req, res) => {
+router.post("/report", authenticateToken, sosLimiter, async (req, res) => {
   const { riderId, driverId, rideId, location, reason } = req.body;
 
-  if (!reason || !location) {
-    return res.status(400).json({ error: "กรุณาระบุเหตุผลและพิกัด" });
+  if (!reason || !location || !location.lat || !location.lng) {
+    return res.status(400).json({ error: "กรุณาระบุเหตุผลและพิกัดให้ครบถ้วน" });
   }
 
   try {
     const sosReport = new SOS({ riderId, driverId, rideId, location, reason });
     await sosReport.save();
 
-    // ✅ แบนคนขับทันที
-    await User.findByIdAndUpdate(driverId, { status: "suspended" });
+    // ✅ ตรวจสอบก่อน suspend driver (ป้องกันกลั่นแกล้ง)
+    if (driverId) {
+      const driver = await User.findById(driverId);
+      if (driver && driver.role === "driver") {
+        // อัปเดตสถานะเป็น under_review แทน suspend ทันที
+        driver.status = "under_review";
+        await driver.save();
+      }
+    }
 
-    // TODO: แจ้งแอดมิน/ศูนย์ (เช่น Firebase Notification, Email ฯลฯ)
+    // ✅ โทรออก 191 หากเหตุร้ายแรง (ตัวอย่าง: reason มีคำว่า "โจร" / "ทำร้าย")
+    {
+      // call company/emergency when severe
+      const severeKeywords = ["โจร", "ทำร้าย", "ข่มขืน", "ทำร้ายร่างกาย"];
+      if (severeKeywords.some(k => reason.includes(k))) {
+        const { triggerCallToCallCenter } = require("../services/call.service");
+        triggerCallToCallCenter({
+          sosId: sosReport._id,
+          rideId,
+          location,
+          severity: sosReport.severity,
+          riderPhone: req.user?.phone || null
+        }).catch(e => console.error("Emergency call failed:", e && e.message));
+      }
+    }
 
-    res.json({ message: "รับแจ้งเหตุแล้ว คนขับถูกระงับชั่วคราว", sos: sosReport });
+    res.json({ message: "รับแจ้งเหตุแล้ว ข้อมูลถูกบันทึก", sos: sosReport });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: "ไม่สามารถแจ้งเหตุได้" });
   }
 });

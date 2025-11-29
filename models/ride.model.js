@@ -1,37 +1,41 @@
 const mongoose = require("mongoose");
 
 const rideSchema = new mongoose.Schema({
-  riderId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-  driverId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+  riderId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
+  driverId: { type: mongoose.Schema.Types.ObjectId, ref: "User", index: true },
 
   pickup: {
-    lat: Number,
-    lng: Number,
-    address: String
+    lat: { type: Number, required: true },
+    lng: { type: Number, required: true },
+    address: { type: String, required: true }
   },
   dropoff: {
-    lat: Number,
-    lng: Number,
-    address: String
+    lat: { type: Number, required: true },
+    lng: { type: Number, required: true },
+    address: { type: String, required: true }
   },
 
-  fare: Number,
+  fare: { type: Number, required: true },
   priority: { type: Boolean, default: false },
   promoCode: { type: String, default: null },
 
   rerouted: { type: Boolean, default: false },
-  originalRoute: { type: Array, default: [] },
-  newRoute: { type: Array, default: [] },
+  originalRoute: [{
+    lat: Number,
+    lng: Number
+  }],
+  newRoute: [{
+    lat: Number,
+    lng: Number
+  }],
   extraDistance: { type: Number, default: 0 },
 
-  // ✅ ช่องทางชำระเงิน
   paymentMethod: {
     type: String,
     enum: ["cash", "wallet", "credit", "qr", "promptpay"],
     default: "cash"
   },
 
-  // ✅ สถานะการชำระเงิน
   paymentStatus: {
     type: String,
     enum: ["pending", "paid", "failed", "refunded"],
@@ -42,9 +46,7 @@ const rideSchema = new mongoose.Schema({
     type: String,
     enum: ["requested", "accepted", "rerouted", "completed", "cancelled"],
     default: "requested"
-  },
-
-  createdAt: { type: Date, default: Date.now }
-});
+  }
+}, { timestamps: true });
 
 module.exports = mongoose.model("Ride", rideSchema);

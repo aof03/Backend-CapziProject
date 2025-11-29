@@ -2,11 +2,16 @@ const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
 
 const adminSchema = new mongoose.Schema({
-  email: { type: String, required: true, unique: true },
-  password: { type: String, required: true }, // จะถูก hash อัตโนมัติ
-  name: String,
+  email: { 
+    type: String, 
+    required: true, 
+    unique: true, 
+    match: /^[^\s@]+@[^\s@]+\.[^\s@]+$/ 
+  },
+  password: { type: String, required: true },
+  name: { type: String },
   role: { type: String, default: "admin" }
-});
+}, { timestamps: true });
 
 // ✅ Hash password ก่อนบันทึก
 adminSchema.pre("save", async function (next) {
@@ -17,8 +22,11 @@ adminSchema.pre("save", async function (next) {
 });
 
 // ✅ เมธอดเปรียบเทียบรหัสผ่านตอนล็อกอิน
-adminSchema.methods.comparePassword = async function (inputPassword) {
-  return await bcrypt.compare(inputPassword, this.password);
+adminSchema.methods.comparePassword = function (inputPassword) {
+  return bcrypt.compare(inputPassword, this.password);
 };
+
+// ✅ Index
+adminSchema.index({ email: 1 });
 
 module.exports = mongoose.model("Admin", adminSchema);
