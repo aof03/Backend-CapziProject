@@ -185,66 +185,113 @@
 // routes/ratingReview.routes.js
 const express = require("express");
 const router = express.Router();
+const { body, param, query, validationResult } = require("express-validator");
 const RatingReview = require("../models/ratingReview.model");
 const Ride = require("../models/ride.model");
 const { authenticateToken } = require("../middleware/auth.middleware");
+const mongoose = require("mongoose");
 
-// ✅ ส่งรีวิว
-router.post("/submit", authenticateToken, async (req, res) => {
-  const { rideId, revieweeId, rating, comment } = req.body;
+/* Helpers */
+const asyncHandler = (fn) => (req, res, next) => {
+  Promise.resolve(fn(req, res, next)).catch(next);
+};
+const runValidation = (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+  next();
+};
 
-  if (!rideId || !revieweeId || !rating) {
-    return res.status(400).json({ error: "กรอกข้อมูลไม่ครบ" });
-  }
+/* -------------------------------------------
+   POST /submit
+   body: { rideId, revieweeId, rating, comment? }
+------------------------------------------- */
+router.post(
+  "/submit",
+  authenticateToken,
+  [
+    body("rideId").isMongoId().withMessage("rideId ไม่ถูกต้อง"),
+    body("revieweeId").isMongoId().withMessage("revieweeId ไม่ถูกต้อง"),
+    body("rating").isInt({ min: 1, max: 5 }).withMessage("rating ต้องเป็นตัวเลข 1-5"),
+    body("comment").optional().isString().trim().isLength({ max: 500 }).withMessage("comment สูงสุด 500 ตัวอักษร")
+  ],
+  runValidation,
+  asyncHandler(async (req, res) => {
+    const { rideId, revieweeId, rating, comment } = req.body;
+    const reviewerId = req.user.userId;
 
-  try {
-    const ride = await Ride.findById(rideId);
-    if (!ride) return res.status(404).json({ error: "ไม่พบ ride นี้" });
+    const ride = await Ride.findById(rideId).select("riderId driverId status completedAt");
+    if (!ride) return res.status(404).json({ error: "ไม่พบ ride" });
 
-    const isReviewerRider = req.user.userId === ride.riderId.toString();
-    const isReviewerDriver = req.user.userId === ride.driverId?.toString();
+    // ensure reviewer participated
+    const isReviewerRider = ride.riderId && ride.riderId.toString() === reviewerId;
+    const isReviewerDriver = ride.driverId && ride.driverId.toString() === reviewerId;
+    if (!isReviewerRider && !isReviewerDriver) return res.status(403).json({ error: "คุณไม่ได้อยู่ใน ride นี้" });
 
-    if (!isReviewerRider && !isReviewerDriver) {
-      return res.status(403).json({ error: "คุณไม่ได้อยู่ใน ride นี้" });
+    // ensure reviewee is the counterpart
+    const expectedRevieweeId = isReviewerRider ? ride.driverId?.toString() : ride.riderId?.toString();
+    if (!expectedRevieweeId || expectedRevieweeId !== revieweeId) {
+      return res.status(400).json({ error: "revieweeId ต้องเป็นผู้ร่วมการเดินทางอีกฝ่ายหนึ่ง" });
     }
 
-    const existing = await RatingReview.findOne({ rideId, reviewerId: req.user.userId });
-    if (existing) return res.status(400).json({ error: "คุณรีวิวไปแล้ว" });
+    // allow review only after completion (or if completedAt exists)
+    if (!(ride.status === "completed" || ride.completedAt)) {
+      return res.status(400).json({ error: "สามารถรีวิวได้หลังการเดินทางเสร็จสิ้นเท่านั้น" });
+    }
 
-    const review = new RatingReview({
-      rideId,
-      reviewerId: req.user.userId,
-      revieweeId,
-      rating,
-      comment,
-      role: isReviewerRider ? "rider" : "driver"
-    });
+    // delegate creation/validation to model helper (prevents duplicates etc.)
+    try {
+      const review = await RatingReview.createReview({
+        rideId: mongoose.Types.ObjectId(rideId),
+        reviewerId: mongoose.Types.ObjectId(reviewerId),
+        revieweeId: mongoose.Types.ObjectId(revieweeId),
+        role: isReviewerRider ? "rider" : "driver",
+        rating,
+        comment
+      });
 
-    await review.save();
-    res.json({ message: "ส่งรีวิวสำเร็จ", review });
-  } catch (err) {
-    res.status(500).json({ error: "เกิดข้อผิดพลาด" });
-  }
-});
+      const populated = await RatingReview.findById(review._id)
+        .populate("reviewerId", "name avatar")
+        .populate("revieweeId", "name avatar");
 
-// ✅ ดูคะแนนเฉลี่ย
-router.get("/user/:id", async (req, res) => {
-  try {
-    const reviews = await RatingReview.find({ revieweeId: req.params.id });
+      return res.status(201).json({ message: "ส่งรีวิวสำเร็จ", review: populated });
+    } catch (err) {
+      // model may throw validation/duplicate errors
+      return res.status(400).json({ error: err.message || "ไม่สามารถสร้างรีวิวได้" });
+    }
+  })
+);
 
-    const average =
-      reviews.length > 0
-        ? (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(2)
-        : null;
+/* -------------------------------------------
+   GET /user/:id
+   query: page, limit, role, minRating, search
+------------------------------------------- */
+router.get(
+  "/user/:id",
+  [
+    param("id").isMongoId().withMessage("id ไม่ถูกต้อง"),
+    query("page").optional().toInt().isInt({ min: 1 }),
+    query("limit").optional().toInt().isInt({ min: 1, max: 200 }),
+    query("role").optional().isIn(["rider", "driver"]),
+    query("minRating").optional().toInt().isInt({ min: 1, max: 5 }),
+    query("search").optional().isString().trim().isLength({ max: 200 })
+  ],
+  runValidation,
+  asyncHandler(async (req, res) => {
+    const userId = req.params.id;
+    const options = {
+      role: req.query.role || null,
+      status: "approved",
+      visibility: "public",
+      page: parseInt(req.query.page || 1, 10),
+      limit: Math.min(parseInt(req.query.limit || 20, 10), 200),
+      minRating: req.query.minRating ? parseInt(req.query.minRating, 10) : null,
+      search: req.query.search || null,
+      includeDeleted: false
+    };
 
-    res.json({
-      averageRating: average,
-      totalReviews: reviews.length,
-      reviews
-    });
-  } catch (err) {
-    res.status(500).json({ error: "เกิดข้อผิดพลาด" });
-  }
-});
+    const result = await RatingReview.getUserReviews(userId, options);
+    return res.json(result);
+  })
+);
 
 module.exports = router;

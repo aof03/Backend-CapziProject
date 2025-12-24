@@ -365,121 +365,203 @@
 
 const express = require("express");
 const router = express.Router();
+const mongoose = require("mongoose");
 const User = require("../models/user.model");
 const Ride = require("../models/ride.model");
 const { authenticateToken, onlyAdmin } = require("../middleware/auth.middleware");
+const { body, param, query, validationResult } = require("express-validator");
 
-// ✅ ดูโปรไฟล์ของตัวเอง
-router.get("/me", authenticateToken, async (req, res) => {
-  try {
-    const user = await User.findById(req.user.userId).select("-__v");
+const ObjectId = mongoose.Types.ObjectId;
+
+/* Helpers */
+const asyncHandler = (fn) => (req, res, next) => {
+  Promise.resolve(fn(req, res, next)).catch(next);
+};
+
+const runValidation = (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+  next();
+};
+
+const isValidUrl = (s) => typeof s === "string" && /^https?:\/\/\S+\.\S+/.test(s);
+
+/* -------------------------------------------
+   GET /me - ดูโปรไฟล์ของตัวเอง
+------------------------------------------- */
+router.get(
+  "/me",
+  authenticateToken,
+  asyncHandler(async (req, res) => {
+    const user = await User.findById(req.user.userId).select("-password -__v");
     if (!user) return res.status(404).json({ error: "ไม่พบผู้ใช้" });
 
-    let extraData = {};
+    const base = { user };
 
     if (user.role === "rider") {
-      const rideCount = await Ride.countDocuments({ riderId: user._id });
-      extraData = { rideCount };
-    } else if (user.role === "driver") {
-      const jobCount = await Ride.countDocuments({ driverId: user._id });
-      const totalEarnings = await Ride.aggregate([
-        { $match: { driverId: user._id.toString(), status: "completed" } },
-        { $group: { _id: null, total: { $sum: "$fare" } } }
-      ]);
-      extraData = {
-        jobCount,
-        totalEarnings: totalEarnings[0]?.total || 0
-      };
+      const rideCount = await Ride.countDocuments({ riderId: user._id, isDeleted: { $ne: true } });
+      return res.json({ ...base, rideCount });
     }
 
-    res.json({ user, ...extraData });
-  } catch (err) {
-    res.status(500).json({ error: "เกิดข้อผิดพลาดในการโหลดโปรไฟล์" });
-  }
-});
+    if (user.role === "driver") {
+      const jobCount = await Ride.countDocuments({ driverId: user._id, status: { $ne: "canceled" }, isDeleted: { $ne: true } });
 
-// ✅ อัปเดตรูปโปรไฟล์
-router.patch("/upload-photo", authenticateToken, async (req, res) => {
-  const { profileImage } = req.body; // URL ของรูปภาพ
+      const agg = await Ride.aggregate([
+        { $match: { driverId: user._id, status: "completed", isDeleted: { $ne: true } } },
+        { $group: { _id: null, total: { $sum: "$fare" } } }
+      ]);
 
-  if (!profileImage) return res.status(400).json({ error: "กรุณาระบุ URL รูปภาพ" });
+      const totalEarnings = agg[0]?.total || 0;
+      return res.json({ ...base, jobCount, totalEarnings });
+    }
 
-  try {
-    await User.findByIdAndUpdate(req.user.userId, { profileImage });
-    res.json({ message: "อัปเดตรูปโปรไฟล์สำเร็จ" });
-  } catch (err) {
-    res.status(500).json({ error: "ไม่สามารถอัปเดตรูปได้" });
-  }
-});
+    return res.json(base);
+  })
+);
 
-// ✅ อัปโหลด KYC สำหรับคนขับ
-router.patch("/kyc", authenticateToken, async (req, res) => {
-  const { idCardNumber, driverLicenseNumber, profilePhotoUrl, idCardPhotoUrl, licensePhotoUrl } = req.body;
+/* -------------------------------------------
+   PATCH /upload-photo - อัปเดตรูปโปรไฟล์
+   body: { profileImage }
+------------------------------------------- */
+router.patch(
+  "/upload-photo",
+  authenticateToken,
+  [
+    body("profileImage").isString().trim().notEmpty().withMessage("profileImage is required")
+  ],
+  runValidation,
+  asyncHandler(async (req, res) => {
+    const { profileImage } = req.body;
+    if (!isValidUrl(profileImage)) return res.status(400).json({ error: "URL รูปภาพไม่ถูกต้อง" });
 
-  if (!idCardNumber || !driverLicenseNumber || !profilePhotoUrl || !idCardPhotoUrl || !licensePhotoUrl) {
-    return res.status(400).json({ error: "ข้อมูล KYC ไม่ครบถ้วน" });
-  }
+    const updated = await User.findByIdAndUpdate(
+      req.user.userId,
+      { profileImage },
+      { new: true, select: "-password -__v" }
+    );
 
-  try {
+    if (!updated) return res.status(404).json({ error: "ไม่พบผู้ใช้" });
+
+    res.json({ message: "อัปเดตรูปโปรไฟล์สำเร็จ", user: updated });
+  })
+);
+
+/* -------------------------------------------
+   PATCH /kyc - อัปโหลดข้อมูล KYC (driver only)
+   body: { idCardNumber, driverLicenseNumber, profilePhotoUrl, idCardPhotoUrl, licensePhotoUrl }
+------------------------------------------- */
+router.patch(
+  "/kyc",
+  authenticateToken,
+  [
+    body("idCardNumber").isString().trim().notEmpty().withMessage("idCardNumber is required"),
+    body("driverLicenseNumber").isString().trim().notEmpty().withMessage("driverLicenseNumber is required"),
+    body("profilePhotoUrl").isString().trim().notEmpty().withMessage("profilePhotoUrl is required"),
+    body("idCardPhotoUrl").isString().trim().notEmpty().withMessage("idCardPhotoUrl is required"),
+    body("licensePhotoUrl").isString().trim().notEmpty().withMessage("licensePhotoUrl is required")
+  ],
+  runValidation,
+  asyncHandler(async (req, res) => {
+    const { idCardNumber, driverLicenseNumber, profilePhotoUrl, idCardPhotoUrl, licensePhotoUrl } = req.body;
+
+    if (![profilePhotoUrl, idCardPhotoUrl, licensePhotoUrl].every(isValidUrl)) {
+      return res.status(400).json({ error: "รูปภาพต้องเป็น URL ที่ถูกต้อง" });
+    }
+
     const user = await User.findById(req.user.userId);
     if (!user) return res.status(404).json({ error: "ไม่พบผู้ใช้" });
     if (user.role !== "driver") return res.status(403).json({ error: "เฉพาะคนขับเท่านั้นที่อัปโหลด KYC ได้" });
 
     user.kyc = {
-      idCardNumber,
-      driverLicenseNumber,
-      profilePhotoUrl,
-      idCardPhotoUrl,
-      licensePhotoUrl,
+      idCardNumber: idCardNumber.trim(),
+      driverLicenseNumber: driverLicenseNumber.trim(),
+      profilePhotoUrl: profilePhotoUrl.trim(),
+      idCardPhotoUrl: idCardPhotoUrl.trim(),
+      licensePhotoUrl: licensePhotoUrl.trim(),
       verifiedAt: null,
-      verifiedByAdminId: null
+      verifiedByAdminId: null,
+      note: null
     };
     user.status = "under_review";
     await user.save();
 
     res.json({ message: "ส่งข้อมูล KYC สำเร็จ กำลังรอตรวจสอบ" });
-  } catch (err) {
-    res.status(500).json({ error: "เกิดข้อผิดพลาดในการส่งข้อมูล KYC" });
-  }
-});
+  })
+);
 
-// ✅ แสดงรายการคนขับที่รอตรวจสอบ KYC
-router.get("/admin/kyc-pending", authenticateToken, onlyAdmin, async (req, res) => {
-  try {
-    const pendingDrivers = await User.find({ role: "driver", status: "under_review" }).select("name phone kyc");
-    res.json({ pendingDrivers });
-  } catch (err) {
-    res.status(500).json({ error: "โหลดรายการไม่สำเร็จ" });
-  }
-});
+/* -------------------------------------------
+   GET /admin/kyc-pending - ดูรายการคนขับที่รอตรวจสอบ KYC (admin)
+   query: page, limit
+------------------------------------------- */
+router.get(
+  "/admin/kyc-pending",
+  authenticateToken,
+  onlyAdmin,
+  [
+    query("page").optional().toInt().isInt({ min: 1 }).withMessage("page must be >=1"),
+    query("limit").optional().toInt().isInt({ min: 1, max: 200 }).withMessage("limit must be 1-200")
+  ],
+  runValidation,
+  asyncHandler(async (req, res) => {
+    const page = req.query.page || 1;
+    const limit = Math.min(req.query.limit || 50, 200);
+    const skip = (page - 1) * limit;
 
-// ✅ แอดมินอนุมัติหรือปฏิเสธ KYC
-router.patch("/admin/kyc-review/:driverId", authenticateToken, onlyAdmin, async (req, res) => {
-  const { decision } = req.body; // "approve" หรือ "reject"
+    const [pendingDrivers, total] = await Promise.all([
+      User.find({ role: "driver", status: "under_review" })
+        .select("name phone kyc createdAt")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
+      User.countDocuments({ role: "driver", status: "under_review" })
+    ]);
 
-  if (!["approve", "reject"].includes(decision)) {
-    return res.status(400).json({ error: "ต้องระบุ decision เป็น approve หรือ reject" });
-  }
+    res.json({
+      pendingDrivers,
+      pagination: { total, page, limit, pages: Math.ceil(total / limit) }
+    });
+  })
+);
 
-  try {
-    const driver = await User.findById(req.params.driverId);
-    if (!driver || driver.role !== "driver") {
-      return res.status(404).json({ error: "ไม่พบคนขับ" });
-    }
+/* -------------------------------------------
+   PATCH /admin/kyc-review/:driverId - แอดมินอนุมัติหรือปฏิเสธ KYC
+   body: { decision: 'approve'|'reject', note?: string }
+------------------------------------------- */
+router.patch(
+  "/admin/kyc-review/:driverId",
+  authenticateToken,
+  onlyAdmin,
+  [
+    param("driverId").isMongoId().withMessage("driverId ไม่ถูกต้อง"),
+    body("decision").isIn(["approve", "reject"]).withMessage("ต้องระบุ decision เป็น approve หรือ reject"),
+    body("note").optional().isString().trim().isLength({ max: 1000 })
+  ],
+  runValidation,
+  asyncHandler(async (req, res) => {
+    const { decision, note } = req.body;
+    const { driverId } = req.params;
+
+    const driver = await User.findById(driverId);
+    if (!driver || driver.role !== "driver") return res.status(404).json({ error: "ไม่พบคนขับ" });
+
+    if (!driver.kyc) return res.status(400).json({ error: "คนขับยังไม่ได้ส่งข้อมูล KYC" });
 
     if (decision === "approve") {
       driver.status = "active";
       driver.kyc.verifiedAt = new Date();
-      driver.kyc.verifiedByAdminId = req.user.userId;
+      driver.kyc.verifiedByAdminId = ObjectId(req.user.userId);
+      driver.kyc.note = note || null;
     } else {
       driver.status = "suspended";
+      // keep kyc data but mark as rejected
+      driver.kyc.verifiedAt = null;
+      driver.kyc.verifiedByAdminId = ObjectId(req.user.userId);
+      driver.kyc.note = note || "KYC rejected by admin";
     }
 
     await driver.save();
     res.json({ message: `KYC ถูก${decision === "approve" ? "อนุมัติ" : "ปฏิเสธ"}เรียบร้อย` });
-  } catch (err) {
-    res.status(500).json({ error: "เกิดข้อผิดพลาดในการตรวจสอบ KYC" });
-  }
-});
+  })
+);
 
 module.exports = router;

@@ -1,282 +1,138 @@
-/**
- * @swagger
- * tags:
- *   name: Ride
- *   description: ระบบจัดการการเดินทางและการชำระเงิน
- */
-
-/**
- * @swagger
- * /confirm-cash/{rideId}:
- *   patch:
- *     summary: ยืนยันชำระเงินแบบเงินสด (เฉพาะคนขับ)
- *     tags: [Ride]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: rideId
- *         schema:
- *           type: string
- *         required: true
- *         description: ไอดีของรายการเดินทางที่ต้องการยืนยันชำระเงิน
- *     responses:
- *       200:
- *         description: ยืนยันรับเงินสดเรียบร้อย พร้อมข้อมูล ride ล่าสุด
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   example: ยืนยันรับเงินสดเรียบร้อย
- *                 ride:
- *                   type: object
- *                   properties:
- *                     _id:
- *                       type: string
- *                       example: 60d0fe4f5311236168a109cb
- *                     paymentMethod:
- *                       type: string
- *                       example: cash
- *                     paymentStatus:
- *                       type: string
- *                       example: paid
- *                     fare:
- *                       type: number
- *                       example: 150
- *                     // ... properties ของ ride model อื่น ๆ ตามจริง
- *       400:
- *         description: ไม่ใช่เงินสด
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 error:
- *                   type: string
- *                   example: ไม่ใช่เงินสด
- *       401:
- *         description: ไม่ได้เข้าสู่ระบบ หรือไม่ใช่คนขับ
- *       404:
- *         description: ไม่พบรายการเดินทาง
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 error:
- *                   type: string
- *                   example: ไม่พบรายการเดินทาง
- *       500:
- *         description: ไม่สามารถยืนยันการชำระเงินได้ (server error)
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 error:
- *                   type: string
- *                   example: ไม่สามารถยืนยันการชำระเงินได้
- */
-
-/**
- * @swagger
- * /generate-qr/{rideId}:
- *   post:
- *     summary: สร้าง QR Code หรือ PromptPay Link สำหรับการชำระเงิน (จำลอง)
- *     tags: [Ride]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: rideId
- *         schema:
- *           type: string
- *         required: true
- *         description: ไอดีของรายการเดินทาง
- *     requestBody:
- *       description: ระบุวิธีการชำระเงิน (promptpay หรือ qr)
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - method
- *             properties:
- *               method:
- *                 type: string
- *                 example: promptpay
- *     responses:
- *       200:
- *         description: สร้างลิงก์ QR Code สำเร็จ
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   example: สร้างลิงก์ promptpay สำเร็จ
- *                 paymentLink:
- *                   type: string
- *                   example: https://fake-payment-provider.com/pay?rideId=60d0fe4f5311236168a109cb&method=promptpay&amount=150
- *                 fare:
- *                   type: number
- *                   example: 150
- *       404:
- *         description: ไม่พบรายการเดินทาง
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 error:
- *                   type: string
- *                   example: ไม่พบรายการเดินทาง
- *       500:
- *         description: เกิดข้อผิดพลาดในการสร้าง QR
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 error:
- *                   type: string
- *                   example: เกิดข้อผิดพลาดในการสร้าง QR
- */
-
-/**
- * @swagger
- * /wallet/{rideId}:
- *   patch:
- *     summary: ยืนยันการชำระเงินผ่าน Wallet (จำลอง)
- *     tags: [Ride]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: rideId
- *         schema:
- *           type: string
- *         required: true
- *         description: ไอดีของรายการเดินทาง
- *     responses:
- *       200:
- *         description: ชำระผ่าน Wallet สำเร็จ พร้อมข้อมูล ride ล่าสุด
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   example: ชำระผ่าน Wallet สำเร็จ
- *                 ride:
- *                   type: object
- *                   properties:
- *                     _id:
- *                       type: string
- *                       example: 60d0fe4f5311236168a109cb
- *                     paymentMethod:
- *                       type: string
- *                       example: wallet
- *                     paymentStatus:
- *                       type: string
- *                       example: paid
- *                     fare:
- *                       type: number
- *                       example: 150
- *                     // ... properties ของ ride model อื่น ๆ ตามจริง
- *       400:
- *         description: ไม่ใช่ช่องทาง Wallet
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 error:
- *                   type: string
- *                   example: ไม่ใช่ช่องทาง Wallet
- *       404:
- *         description: ไม่พบรายการเดินทาง
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 error:
- *                   type: string
- *                   example: ไม่พบรายการเดินทาง
- *       500:
- *         description: เกิดข้อผิดพลาด (server error)
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 error:
- *                   type: string
- *                   example: เกิดข้อผิดพลาด
- */
-
 const express = require("express");
 const router = express.Router();
+const { param, body, validationResult } = require("express-validator");
 const Ride = require("../models/ride.model");
 const { authenticateToken, onlyDriver } = require("../middleware/auth.middleware");
+const mongoose = require("mongoose");
 
-// ✅ ยืนยันชำระเงินแบบเงินสด
-router.patch("/confirm-cash/:rideId", authenticateToken, onlyDriver, async (req, res) => {
-  try {
-    const ride = await Ride.findById(req.params.rideId);
+/* Helpers */
+const asyncHandler = (fn) => (req, res, next) => {
+  Promise.resolve(fn(req, res, next)).catch(next);
+};
+
+const runValidation = (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+  next();
+};
+
+const ALLOWED_QR_METHODS = ["promptpay", "qr"];
+
+/* =====================================================
+   ✔ PATCH /confirm-cash/:rideId
+===================================================== */
+router.patch(
+  "/confirm-cash/:rideId",
+  authenticateToken,
+  onlyDriver,
+  [param("rideId").isMongoId().withMessage("Invalid rideId")],
+  runValidation,
+  asyncHandler(async (req, res) => {
+    const { rideId } = req.params;
+    const driverId = req.user.userId;
+
+    const ride = await Ride.findById(rideId);
     if (!ride) return res.status(404).json({ error: "ไม่พบรายการเดินทาง" });
-    if (ride.paymentMethod !== "cash") return res.status(400).json({ error: "ไม่ใช่เงินสด" });
+
+    if (!ride.driverId || ride.driverId.toString() !== driverId.toString()) {
+      return res.status(403).json({ error: "คุณไม่ใช่คนขับของรายการนี้" });
+    }
+
+    if (ride.paymentMethod !== "cash") {
+      return res.status(400).json({ error: "ไม่ใช่เงินสด" });
+    }
+
+    if (ride.paymentStatus === "paid") {
+      return res.status(400).json({ error: "การชำระเงินถูกยืนยันแล้ว" });
+    }
 
     ride.paymentStatus = "paid";
+    ride.paymentTxId = `cash_${new mongoose.Types.ObjectId()}`;
     await ride.save();
 
     res.json({ message: "ยืนยันรับเงินสดเรียบร้อย", ride });
-  } catch (err) {
-    res.status(500).json({ error: "ไม่สามารถยืนยันการชำระเงินได้" });
-  }
-});
+  })
+);
 
-// ✅ จำลองสร้าง QR Code / PromptPay Link
-router.post("/generate-qr/:rideId", authenticateToken, async (req, res) => {
-  const { method } = req.body; // 'promptpay' หรือ 'qr'
-  try {
-    const ride = await Ride.findById(req.params.rideId);
+/* =====================================================
+   ✔ POST /generate-qr/:rideId
+===================================================== */
+router.post(
+  "/generate-qr/:rideId",
+  authenticateToken,
+  [
+    param("rideId").isMongoId(),
+    body("method")
+      .isString()
+      .trim()
+      .custom((m) => ALLOWED_QR_METHODS.includes(m))
+      .withMessage("method must be 'promptpay' or 'qr'")
+  ],
+  runValidation,
+  asyncHandler(async (req, res) => {
+    const { rideId } = req.params;
+    const { method } = req.body;
+
+    const ride = await Ride.findById(rideId);
     if (!ride) return res.status(404).json({ error: "ไม่พบรายการเดินทาง" });
 
-    // จำลองสร้างลิงก์/QR (จริง ๆ ควรเชื่อมกับบริการ PromptPay API, SCB, ฯลฯ)
-    const paymentLink = `https://fake-payment-provider.com/pay?rideId=${ride._id}&method=${method}&amount=${ride.fare}`;
+    if (ride.paymentStatus === "paid") {
+      return res.status(400).json({ error: "การชำระเงินถูกยืนยันแล้ว" });
+    }
+
+    const amount = Number(ride.fare || ride.estimatedFare || 0);
+    if (amount <= 0) {
+      return res.status(400).json({ error: "ยอดค่าบริการไม่ถูกต้อง" });
+    }
+
+    const token = new mongoose.Types.ObjectId();
+    const paymentLink = `https://fake-payment-provider.local/pay?rideId=${ride._id}&method=${method}&amount=${amount}&token=${token}`;
+
+    ride.paymentMethod = method === "promptpay" ? "promptpay" : "qr";
+    ride.paymentTxId = `link_${token}`;
+    await ride.save();
 
     res.json({
       message: `สร้างลิงก์ ${method} สำเร็จ`,
       paymentLink,
-      fare: ride.fare
+      fare: amount
     });
-  } catch (err) {
-    res.status(500).json({ error: "เกิดข้อผิดพลาดในการสร้าง QR" });
-  }
-});
+  })
+);
 
-// ✅ ยืนยันการชำระผ่าน Wallet (จำลอง)
-router.patch("/wallet/:rideId", authenticateToken, async (req, res) => {
-  const ride = await Ride.findById(req.params.rideId);
-  if (!ride) return res.status(404).json({ error: "ไม่พบรายการเดินทาง" });
+/* =====================================================
+   ✔ PATCH /wallet/:rideId
+===================================================== */
+router.patch(
+  "/wallet/:rideId",
+  authenticateToken,
+  [param("rideId").isMongoId()],
+  runValidation,
+  asyncHandler(async (req, res) => {
+    const { rideId } = req.params;
+    const userId = req.user.userId;
 
-  if (ride.paymentMethod !== "wallet") {
-    return res.status(400).json({ error: "ไม่ใช่ช่องทาง Wallet" });
-  }
+    const ride = await Ride.findById(rideId);
+    if (!ride) return res.status(404).json({ error: "ไม่พบรายการเดินทาง" });
 
-  // ในระบบจริงควรตรวจสอบยอดเงินของผู้ใช้ก่อน
-  ride.paymentStatus = "paid";
-  await ride.save();
+    if (!ride.riderId || ride.riderId.toString() !== userId.toString()) {
+      return res.status(403).json({ error: "คุณไม่มีสิทธิ์ยืนยันการชำระเงินนี้" });
+    }
 
-  res.json({ message: "ชำระผ่าน Wallet สำเร็จ", ride });
-});
+    if (ride.paymentMethod !== "wallet") {
+      return res.status(400).json({ error: "ไม่ใช่ช่องทาง Wallet" });
+    }
+
+    if (ride.paymentStatus === "paid") {
+      return res.status(400).json({ error: "ชำระเงินแล้ว" });
+    }
+
+    ride.paymentStatus = "paid";
+    ride.paymentTxId = `wallet_${new mongoose.Types.ObjectId()}`;
+    await ride.save();
+
+    res.json({ message: "ชำระผ่าน Wallet สำเร็จ", ride });
+  })
+);
 
 module.exports = router;

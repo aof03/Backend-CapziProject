@@ -4,14 +4,16 @@ const cors = require("cors");
 require("dotenv").config();
 const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("./swagger/swaggerConfig");
+const ridesRoutes = require("./routes/ride.routes");
+const adminRoutes = require("./routes/admin.routes");
 
 const app = express();
 
-// ✅ Middleware
+// Middleware
 app.use(cors());
 app.use(express.json());
 
-// ✅ MongoDB Connection (Async พร้อมจัดการ error)
+// MongoDB Connection
 const connectDB = async () => {
   try {
     await mongoose.connect(process.env.MONGO_URI, {
@@ -21,36 +23,38 @@ const connectDB = async () => {
     console.log("✅ MongoDB connected");
   } catch (err) {
     console.error("❌ DB connection error:", err);
-    process.exit(1); // ปิดเซิร์ฟเวอร์ถ้าเชื่อม MongoDB ไม่สำเร็จ
+    process.exit(1);
   }
 };
 connectDB();
 
-// ✅ API Routes
-app.use("/api/auth", require("./routes/auth.routes"));
-app.use("/api/ride", require("./routes/ride.routes"));
+// API Routes
+app.use("/api/driver/kyc", require("./routes/driverKYC.routes"));
+app.use("/api/admin/kyc", require("./routes/adminCriminalKYC.routes"));
+app.use("/api/rider", require("./routes/auth.rider.routes"));
+app.use("/api/driver", require("./routes/driver.routes"));
+app.use("/api/ride", ridesRoutes);
 app.use("/api/sos", require("./routes/sos.routes"));
+app.use("/api/profile", require("./routes/profile.routes"));
 app.use("/api/admin", require("./routes/admin.routes"));
-app.use("/api/profile", require("./routes/profile.routes")); // ✅ โปรไฟล์และ KYC
-app.use("/api/payment", require("./routes/payment.routes")); // ✅ ระบบ wallet หรือ QR
+app.use("/api/payment", require("./routes/payment.routes"));
 app.use("/api/rating-review", require("./routes/ratingReview.routes"));
 app.use("/api/notifications", require("./routes/notification.routes"));
 app.use("/api/chat", require("./routes/chat.routes"));
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-// ✅ Fallback route (optional)
+// Fallback route
 app.get("/", (req, res) => {
-  res.send("Capzi API is running.");
+  res.send("Capzi API is running. 🚀");
 });
 
-// ✅ 404 Not Found Handler
+// 404 Handler
 app.use((req, res) => {
   res.status(404).json({ error: "Endpoint not found" });
 });
 
-// ✅ Start Server
+// Start Server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
-

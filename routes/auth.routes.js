@@ -1,200 +1,108 @@
-/**
- * @swagger
- * tags:
- *   name: Auth
- *   description: ระบบการสมัครสมาชิกและล็อกอิน
- */
-
-/**
- * @swagger
- * /register:
- *   post:
- *     summary: สมัครสมาชิก
- *     tags: [Auth]
- *     requestBody:
- *       description: ข้อมูลผู้ใช้สำหรับสมัครสมาชิก
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - name
- *               - phone
- *               - role
- *             properties:
- *               name:
- *                 type: string
- *                 example: John Doe
- *               phone:
- *                 type: string
- *                 example: "0812345678"
- *               role:
- *                 type: string
- *                 example: user
- *     responses:
- *       200:
- *         description: ลงทะเบียนสำเร็จ พร้อมส่ง token และข้อมูล user
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   example: ลงทะเบียนสำเร็จ
- *                 token:
- *                   type: string
- *                 user:
- *                   type: object
- *                   properties:
- *                     _id:
- *                       type: string
- *                       example: 60d0fe4f5311236168a109ca
- *                     name:
- *                       type: string
- *                       example: John Doe
- *                     phone:
- *                       type: string
- *                       example: "0812345678"
- *                     role:
- *                       type: string
- *                       example: user
- *       400:
- *         description: เบอร์นี้ถูกใช้งานแล้ว
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 error:
- *                   type: string
- *                   example: เบอร์นี้ถูกใช้งานแล้ว
- *       500:
- *         description: สมัครไม่สำเร็จ (server error)
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 error:
- *                   type: string
- *                   example: สมัครไม่สำเร็จ
- */
-
-/**
- * @swagger
- * /login:
- *   post:
- *     summary: ล็อกอินด้วยหมายเลขโทรศัพท์
- *     tags: [Auth]
- *     requestBody:
- *       description: ข้อมูลสำหรับล็อกอิน
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - phone
- *             properties:
- *               phone:
- *                 type: string
- *                 example: "0812345678"
- *     responses:
- *       200:
- *         description: ล็อกอินสำเร็จ พร้อมส่ง token และข้อมูล user
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   example: ล็อกอินสำเร็จ
- *                 token:
- *                   type: string
- *                 user:
- *                   type: object
- *                   properties:
- *                     _id:
- *                       type: string
- *                       example: 60d0fe4f5311236168a109ca
- *                     name:
- *                       type: string
- *                       example: John Doe
- *                     phone:
- *                       type: string
- *                       example: "0812345678"
- *                     role:
- *                       type: string
- *                       example: user
- *       404:
- *         description: ไม่พบผู้ใช้
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 error:
- *                   type: string
- *                   example: ไม่พบผู้ใช้
- *       500:
- *         description: เกิดข้อผิดพลาด (server error)
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 error:
- *                   type: string
- *                   example: เกิดข้อผิดพลาด
- */
-
+// routes/auth.routes.js
 const express = require("express");
 const router = express.Router();
-const jwt = require("jsonwebtoken");
-const User = require("../models/user.model");
 
-// 🔐 ฟังก์ชันสร้าง Token
-const generateToken = (user) => {
-  return jwt.sign(
-    { userId: user._id, role: user.role },
-    process.env.JWT_SECRET,
-    { expiresIn: "1d" } // ✅ หมดอายุภายใน 1 วัน
-  );
+const riderAuthController = require("../controllers/riderAuth.controller");
+const driverAuthController = require("../controllers/driverAuth.controller");
+const commonAuthController = require("../controllers/commonAuth.controller");
+
+const { body, validationResult } = require("express-validator");
+const asyncHandler = require("../middleware/asyncHandler");
+
+/* ============================================================
+   Helper: Run Validation
+============================================================ */
+const runValidation = (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({
+      status: false,
+      message: "Validation failed",
+      errors: errors.array(),
+    });
+  }
+  next();
 };
 
-// ✅ สมัครสมาชิก
-router.post("/register", async (req, res) => {
-  const { name, phone, role } = req.body;
-  try {
-    // ป้องกันเบอร์ซ้ำ
-    const existing = await User.findOne({ phone });
-    if (existing) return res.status(400).json({ error: "เบอร์นี้ถูกใช้งานแล้ว" });
+/* ============================================================
+   🟢 REGISTER RIDER
+   POST /api/auth/register-rider
+============================================================ */
+router.post(
+  "/register-rider",
+  [
+    body("name").notEmpty().withMessage("Name is required"),
+    body("phone")
+      .matches(/^\d{8,15}$/)
+      .withMessage("Phone must be 8-15 digits"),
+    body("email")
+      .optional()
+      .isEmail()
+      .withMessage("Invalid email format"),
+    body("password")
+      .isLength({ min: 6 })
+      .withMessage("Password must be at least 6 characters"),
+  ],
+  runValidation,
+  asyncHandler(riderAuthController.registerRider)
+);
 
-    const user = new User({ name, phone, role });
-    await user.save();
+/* ============================================================
+   🚕 REGISTER DRIVER
+   POST /api/auth/register-driver
+============================================================ */
+router.post(
+  "/register-driver",
+  [
+    body("name").notEmpty().withMessage("Name is required"),
+    body("phone")
+      .matches(/^\d{8,15}$/)
+      .withMessage("Phone must be 8–15 digits"),
+    body("email")
+      .optional()
+      .isEmail()
+      .withMessage("Invalid email format"),
+    body("password")
+      .isLength({ min: 6 })
+      .withMessage("Password must be at least 6 characters"),
 
-    const token = generateToken(user);
-    res.json({ message: "ลงทะเบียนสำเร็จ", token, user });
-  } catch (err) {
-    res.status(500).json({ error: "สมัครไม่สำเร็จ" });
-  }
-});
+    // Vehicle Validation
+    body("vehicle")
+      .isObject()
+      .withMessage("Vehicle object is required"),
+    body("vehicle.model").notEmpty().withMessage("Vehicle model is required"),
+    body("vehicle.plate").notEmpty().withMessage("Vehicle plate is required"),
+    body("vehicle.color").notEmpty().withMessage("Vehicle color is required"),
 
-// ✅ ล็อกอิน
-router.post("/login", async (req, res) => {
-  const { phone } = req.body;
-  try {
-    const user = await User.findOne({ phone });
-    if (!user) return res.status(404).json({ error: "ไม่พบผู้ใช้" });
+    // Location Validation
+    body("location").isObject().withMessage("Location is required"),
+    body("location.lat")
+      .isFloat({ min: -90, max: 90 })
+      .withMessage("Latitude must be between -90 and 90"),
+    body("location.lng")
+      .isFloat({ min: -180, max: 180 })
+      .withMessage("Longitude must be between -180 and 180"),
+  ],
+  runValidation,
+  asyncHandler(driverAuthController.registerDriver)
+);
 
-    const token = generateToken(user);
-    res.json({ message: "ล็อกอินสำเร็จ", token, user });
-  } catch (err) {
-    res.status(500).json({ error: "เกิดข้อผิดพลาด" });
-  }
-});
+/* ============================================================
+   🔐 COMMON LOGIN
+   POST /api/auth/login
+============================================================ */
+router.post(
+  "/login",
+  [
+    body("identifier")
+      .notEmpty()
+      .withMessage("Phone or email identifier is required"),
+    body("password")
+      .notEmpty()
+      .withMessage("Password is required"),
+  ],
+  runValidation,
+  asyncHandler(commonAuthController.login)
+);
 
 module.exports = router;
