@@ -39,7 +39,6 @@ exports.login = async (req, res) => {
       return res.status(400).json({ error: "กรุณากรอกข้อมูลให้ครบ" });
     }
 
-    // ค้นหา admin จาก email หรือ phone
     const admin = await Admin.findOne({
       $or: [
         { email: phoneOrEmail.toLowerCase() },
@@ -51,14 +50,27 @@ exports.login = async (req, res) => {
       return res.status(404).json({ error: "ไม่พบผู้ใช้งาน" });
     }
 
+    // ✅ เช็ก account ถูก lock
+    if (admin.isLocked()) {
+      return res.status(423).json({
+        error: "บัญชีถูกล็อกชั่วคราว กรุณาลองใหม่ภายหลัง"
+      });
+    }
+
+    // ✅ เช็ก status
     if (admin.status !== "active") {
       return res.status(403).json({ error: "บัญชีถูกปิดใช้งาน" });
     }
 
     const isMatch = await bcrypt.compare(password, admin.password);
+
     if (!isMatch) {
+      await admin.incLoginAttempts(); // 🔥 สำคัญ
       return res.status(401).json({ error: "รหัสผ่านไม่ถูกต้อง" });
     }
+
+    // ✅ login สำเร็จ → reset attempts
+    await admin.resetLoginAttempts();
 
     admin.lastLogin = new Date();
     await admin.save();
@@ -82,7 +94,6 @@ exports.login = async (req, res) => {
     res.status(500).json({ error: "เกิดข้อผิดพลาด" });
   }
 };
-
 /* ============================================================
    📝 Register Admin (Super Admin เท่านั้น)
 ============================================================ */

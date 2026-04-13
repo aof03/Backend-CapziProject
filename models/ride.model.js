@@ -1,5 +1,9 @@
 const mongoose = require("mongoose");
 
+/* -------------------------------
+   SUB SCHEMAS
+--------------------------------*/
+
 const coordSchema = new mongoose.Schema({
   lat: { type: Number, required: true },
   lng: { type: Number, required: true }
@@ -10,6 +14,10 @@ const routePointSchema = new mongoose.Schema({
   lng: Number,
   timestamp: { type: Date, default: Date.now }
 }, { _id: false });
+
+/* -------------------------------
+   MAIN SCHEMA
+--------------------------------*/
 
 const rideSchema = new mongoose.Schema({
   riderId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
@@ -65,11 +73,51 @@ const rideSchema = new mongoose.Schema({
   isDeleted: { type: Boolean, default: false }
 }, { timestamps: true });
 
-/* -------------------------------
-   INSTANCE METHODS
---------------------------------*/
+/* ===================================================
+   🔹 STATIC METHODS (เพิ่ม)
+=================================================== */
 
-// Accept Ride
+// หา Ride ที่ยังไม่มีคนรับ (ปลอดภัย + ใช้งาน demo)
+rideSchema.statics.findAvailableRides = function () {
+  return this.find({
+    status: "requested",
+    isDeleted: false,
+    driverId: { $exists: false }
+  })
+    .sort({ requestedAt: 1 })
+    .populate("riderId", "name phone");
+};
+
+/**
+ * รับงานแบบ atomic (ป้องกัน driver 2 คนรับพร้อมกัน)
+ */
+rideSchema.statics.acceptById = async function (rideId, driverId) {
+  const ride = await this.findOneAndUpdate(
+    {
+      _id: rideId,
+      status: "requested",
+      driverId: { $exists: false }
+    },
+    {
+      driverId,
+      status: "accepted",
+      acceptedAt: new Date()
+    },
+    { new: true }
+  );
+
+  if (!ride) {
+    throw new Error("งานถูกคนอื่นรับไปแล้ว");
+  }
+
+  return ride;
+};
+
+/* ===================================================
+   🔹 INSTANCE METHODS (โค้ดเดิม + ไม่แก้)
+=================================================== */
+
+// Accept Ride (ใช้ได้ แต่แนะนำ acceptById ใน production)
 rideSchema.methods.accept = async function (driverId) {
   if (this.status !== "requested") {
     throw new Error("สถานะงานไม่พร้อมให้รับ");
@@ -82,7 +130,9 @@ rideSchema.methods.accept = async function (driverId) {
 
 // Start trip
 rideSchema.methods.startTrip = async function () {
-  if (this.status !== "arrived") throw new Error("ยังไม่พร้อมเริ่มงาน");
+  if (this.status !== "arrived") {
+    throw new Error("ยังไม่พร้อมเริ่มงาน");
+  }
   this.status = "on_trip";
   this.startAt = new Date();
   return this.save();
@@ -97,5 +147,22 @@ rideSchema.methods.completeTrip = async function () {
   this.completedAt = new Date();
   return this.save();
 };
+
+// Cancel ride (เพิ่ม)
+rideSchema.methods.cancel = async function () {
+  if (["completed", "cancelled"].includes(this.status)) {
+    throw new Error("ไม่สามารถยกเลิกงานนี้ได้");
+  }
+  this.status = "cancelled";
+  return this.save();
+};
+
+/* ===================================================
+   🔹 INDEXES (สำคัญมากสำหรับ demo)
+=================================================== */
+
+rideSchema.index({ status: 1, requestedAt: 1 });
+rideSchema.index({ driverId: 1 });
+rideSchema.index({ riderId: 1 });
 
 module.exports = mongoose.model("Ride", rideSchema);

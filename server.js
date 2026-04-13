@@ -32,7 +32,7 @@ connectDB();
 app.use("/api/driver/kyc", require("./routes/driverKYC.routes"));
 app.use("/api/admin/kyc", require("./routes/adminCriminalKYC.routes"));
 app.use("/api/rider", require("./routes/auth.rider.routes"));
-app.use("/api/driver", require("./routes/driver.routes"));
+app.use("/api/drivers", require("./routes/driver.routes"));
 app.use("/api/ride", ridesRoutes);
 app.use("/api/sos", require("./routes/sos.routes"));
 app.use("/api/profile", require("./routes/profile.routes"));
