@@ -28,12 +28,9 @@ const connectDB = async () => {
 };
 connectDB();
 
-// API Routes
-app.use("/api/driver/kyc", require("./routes/driverKYC.routes"));
-app.use("/api/admin/kyc", require("./routes/adminCriminalKYC.routes"));
-app.use("/api/rider", require("./routes/auth.rider.routes"));
-app.use("/api/drivers", require("./routes/driver.routes"));
-app.use("/api/ride", ridesRoutes);
+// ✅ API Routes
+app.use("/api/auth", require("./routes/auth.routes"));
+app.use("/api/ride", require("./routes/ride.routes"));
 app.use("/api/sos", require("./routes/sos.routes"));
 app.use("/api/profile", require("./routes/profile.routes"));
 app.use("/api/admin", require("./routes/admin.routes"));
