@@ -4,22 +4,21 @@ const cors = require("cors");
 require("dotenv").config();
 const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("./swagger/swaggerConfig");
-const ridesRoutes = require("./routes/ride.routes");
-const adminRoutes = require("./routes/admin.routes");
 
 const app = express();
 
-// Middleware
+/* =========================
+   Middleware
+========================= */
 app.use(cors());
 app.use(express.json());
 
-// MongoDB Connection
+/* =========================
+   MongoDB Connection
+========================= */
 const connectDB = async () => {
   try {
-    await mongoose.connect(process.env.MONGO_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true
-    });
+    await mongoose.connect(process.env.MONGO_URI);
     console.log("✅ MongoDB connected");
   } catch (err) {
     console.error("❌ DB connection error:", err);
@@ -28,7 +27,9 @@ const connectDB = async () => {
 };
 connectDB();
 
-// ✅ API Routes
+/* =========================
+   Routes
+========================= */
 app.use("/api/auth", require("./routes/auth.routes"));
 app.use("/api/ride", require("./routes/ride.routes"));
 app.use("/api/sos", require("./routes/sos.routes"));
@@ -38,20 +39,29 @@ app.use("/api/payment", require("./routes/payment.routes"));
 app.use("/api/rating-review", require("./routes/ratingReview.routes"));
 app.use("/api/notifications", require("./routes/notification.routes"));
 app.use("/api/chat", require("./routes/chat.routes"));
+
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-// Fallback route
+/* =========================
+   Health Check
+========================= */
 app.get("/", (req, res) => {
   res.send("Capzi API is running. 🚀");
 });
 
-// 404 Handler
+/* =========================
+   404 Handler
+========================= */
 app.use((req, res) => {
   res.status(404).json({ error: "Endpoint not found" });
 });
 
-// Start Server
+/* =========================
+   Start Server (🔥 FIX สำคัญ)
+========================= */
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+
+// ✅ ต้องมี 0.0.0.0 เพื่อให้มือถือเรียกได้
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🚀 Server running on http://0.0.0.0:${PORT}`);
 });

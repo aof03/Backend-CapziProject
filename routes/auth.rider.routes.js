@@ -11,8 +11,7 @@ const authController = require("../controllers/auth.controller");
 
 /* ======================================================
    🟢 Rider Register
-   เพิ่ม log request body สำหรับ debug frontend
-====================================================== */
+   ====================================================== */
 router.post(
   "/register",
   [
@@ -29,16 +28,18 @@ router.post(
   ],
   runValidation,
   asyncHandler(async (req, res, next) => {
-    console.log("🟢 Rider Register request body:", req.body); // <-- log request body
+    console.log("🟢 Rider Register request body:", req.body);
     await authController.registerRider(req, res, next);
   })
 );
 
 /* ======================================================
-   🔐 Rider Login
-   เพิ่ม log request body สำหรับ debug frontend
-====================================================== */
-router.post("/login", authController.login);(
+   🔐 Rider Login (FIXED - safe patch)
+   ====================================================== */
+
+// ✅ PATCH: รองรับของเดิม + แยก validation ให้ถูกต้อง
+router.post(
+  "/login",
   [
     body("phone").notEmpty().withMessage("Phone is required"),
     body("password").notEmpty().withMessage("Password is required"),
@@ -46,9 +47,30 @@ router.post("/login", authController.login);(
   runValidation,
   asyncHandler(async (req, res, next) => {
     console.log("🔐 Rider Login request body:", req.body);
--   await authController.login(req, res, next);
-+   await authController.loginRider(req, res, next);
+
+    // ✅ fallback safety: ถ้า controller เก่ามี login ให้ใช้ loginRider ก่อน
+    if (authController.loginRider) {
+      return await authController.loginRider(req, res, next);
+    }
+
+    // fallback เดิม (ไม่ลบของเก่า)
+    return await authController.login(req, res, next);
   })
 );
+
+// ❌ FIX syntax error เดิมแบบไม่ลบของเก่า (กันพัง build)
+if (false) {
+  authController.login;(
+    [
+      body("phone").notEmpty(),
+      body("password").notEmpty(),
+    ],
+    runValidation,
+    asyncHandler(async (req, res, next) => {
+      console.log("🔐 Rider Login request body:", req.body);
+      await authController.loginRider(req, res, next);
+    })
+  );
+}
 
 module.exports = router;

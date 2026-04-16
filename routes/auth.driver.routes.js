@@ -22,7 +22,7 @@ router.post(
       .notEmpty().withMessage("Phone is required")
       .custom((v) => {
         const cleaned = sanitizePhone(v);
-        return /^0\d{9}$/.test(cleaned); // เบอร์ไทย 10 หลัก
+        return /^0\d{9}$/.test(cleaned);
       })
       .withMessage("Invalid phone number"),
 
@@ -39,7 +39,7 @@ router.post(
 
 /* ======================================================
    🔐 Login (Driver & Rider)
-====================================================== */
+   ====================================================== */
 router.post(
   "/login",
   [
@@ -48,6 +48,33 @@ router.post(
   ],
   runValidation,
   asyncHandler(authController.login)
+);
+
+/* ======================================================
+   🧪 DEBUG TOKEN CHECK (เพิ่มใหม่ - ไม่กระทบระบบเดิม)
+   ====================================================== */
+router.get(
+  "/debug-token",
+  (req, res) => {
+    const header = req.headers.authorization;
+
+    console.log("🧪 Authorization header:", header);
+
+    if (!header) {
+      return res.status(401).json({
+        error: "No Authorization header found",
+      });
+    }
+
+    const token = header.split(" ")[1];
+
+    console.log("🧪 Extracted token:", token);
+
+    return res.json({
+      message: "Token received",
+      token,
+    });
+  }
 );
 
 module.exports = router;

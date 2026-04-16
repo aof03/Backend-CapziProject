@@ -2,17 +2,14 @@ const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
 const crypto = require("crypto");
 
-/* ======================================================
-   🧱 Admin Schema
-====================================================== */
 const adminSchema = new mongoose.Schema(
   {
     name: {
       type: String,
       required: [true, "ชื่อเป็นข้อมูลที่จำเป็น"],
       trim: true,
-      minlength: [3, "ชื่อต้องมีอย่างน้อย 3 ตัวอักษร"],
-      maxlength: [100, "ชื่อต้องไม่เกิน 100 ตัวอักษร"]
+      minlength: 3,
+      maxlength: 100
     },
 
     email: {
@@ -27,21 +24,23 @@ const adminSchema = new mongoose.Schema(
 
     password: {
       type: String,
-      required: [true, "รหัสผ่านเป็นข้อมูลที่จำเป็น"],
-      minlength: [8, "รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร"],
+      required: true,
+      minlength: 8,
       select: false
     },
 
     role: {
       type: String,
       enum: ["admin", "super_admin"],
-      default: "admin"
+      default: "admin",
+      index: true
     },
 
     status: {
       type: String,
       enum: ["active", "inactive", "suspended"],
-      default: "active"
+      default: "active",
+      index: true
     },
 
     permissions: [
@@ -59,73 +58,40 @@ const adminSchema = new mongoose.Schema(
 
     avatar: {
       type: String,
-      default: null,
-      validate: {
-        validator: function (val) {
-          if (!val) return true;
-          return /^https?:\/\/.+\.(jpg|jpeg|png|gif|webp)$/i.test(val);
-        },
-        message: "Avatar URL ไม่ถูกต้อง"
-      }
-    },
-
-    lastLogin: {
-      type: Date,
-      default: null
-    },
-
-    /* 🔐 Security Fields */
-    loginAttempts: {
-      type: Number,
-      default: 0
-    },
-
-    lockUntil: {
-      type: Date,
-      default: null
-    },
-
-    resetToken: {
-      type: String,
-      select: false,
-      default: null
-    },
-
-    resetTokenExpire: {
-      type: Date,
-      select: false,
-      default: null
-    },
-
-    lastPasswordChange: {
-      type: Date,
-      default: null
-    },
-
-    /* 📌 Extra Information */
-    notes: {
-      type: String,
-      default: null,
-      maxlength: 500
-    },
-
-    department: {
-      type: String,
       default: null
     },
 
     phone: {
       type: String,
-      default: null,
       match: [/^[0-9]{8,15}$/, "เบอร์โทรศัพท์ไม่ถูกต้อง"]
-    }
+    },
+
+    department: String,
+    notes: {
+      type: String,
+      maxlength: 500
+    },
+
+    lastLogin: Date,
+
+    /* 🔐 Security */
+    loginAttempts: { type: Number, default: 0 },
+    lockUntil: Date,
+
+    resetToken: { type: String, select: false },
+    resetTokenExpire: { type: Date, select: false },
+
+    lastPasswordChange: Date,
+
+    /* 🧹 Soft Delete */
+    isDeleted: { type: Boolean, default: false }
   },
   { timestamps: true }
 );
 
-/* ======================================================
-   🔐 ก่อน save: Hash Password
-====================================================== */
+/* ================================
+   🔐 Hash Password
+================================ */
 adminSchema.pre("save", async function (next) {
   try {
     if (!this.isModified("password")) return next();
@@ -133,11 +99,7 @@ adminSchema.pre("save", async function (next) {
     const salt = await bcrypt.genSalt(10);
     this.password = await bcrypt.hash(this.password, salt);
 
-    if (this.isNew) {
-      this.lastPasswordChange = new Date();
-    } else {
-      this.lastPasswordChange = new Date();
-    }
+    this.lastPasswordChange = new Date();
 
     next();
   } catch (err) {
@@ -145,19 +107,23 @@ adminSchema.pre("save", async function (next) {
   }
 });
 
-/* ======================================================
-   🔐 เปรียบเทียบ Password
-====================================================== */
-adminSchema.methods.comparePassword = async function (plainPassword) {
-  return bcrypt.compare(plainPassword, this.password);
+/* ================================
+   🔐 Compare Password
+================================ */
+adminSchema.methods.comparePassword = function (plain) {
+  return bcrypt.compare(plain, this.password);
 };
 
-/* ======================================================
-   🔐 Login Attempts (ป้องกัน brute-force)
-====================================================== */
+/* ================================
+   🔐 Login Attempts
+================================ */
+adminSchema.methods.isLocked = function () {
+  return !!(this.lockUntil && this.lockUntil > Date.now());
+};
+
 adminSchema.methods.incLoginAttempts = function () {
   const maxAttempts = 5;
-  const lockTime = 30 * 60 * 1000; // 30 mins
+  const lockTime = 30 * 60 * 1000;
 
   if (this.lockUntil && this.lockUntil < Date.now()) {
     return this.updateOne({
@@ -182,13 +148,9 @@ adminSchema.methods.resetLoginAttempts = function () {
   });
 };
 
-adminSchema.methods.isLocked = function () {
-  return !!(this.lockUntil && this.lockUntil > Date.now());
-};
-
-/* ======================================================
-   🔐 สร้าง Reset Token
-====================================================== */
+/* ================================
+   🔐 Reset Token
+================================ */
 adminSchema.methods.generateResetToken = function () {
   const rawToken = crypto.randomBytes(32).toString("hex");
 
@@ -198,16 +160,14 @@ adminSchema.methods.generateResetToken = function () {
   return rawToken;
 };
 
-/* ======================================================
-   📌 Virtual Field (avatar)
-====================================================== */
-adminSchema.virtual("avatarUrl").get(function () {
-  return this.avatar ? this.avatar : null;
-});
+adminSchema.methods.verifyResetToken = function (token) {
+  const hashed = crypto.createHash("sha256").update(token).digest("hex");
+  return this.resetToken === hashed && this.resetTokenExpire > Date.now();
+};
 
-/* ======================================================
-   🧹 Clean JSON Output
-====================================================== */
+/* ================================
+   🧹 Clean JSON
+================================ */
 adminSchema.methods.toJSON = function () {
   const obj = this.toObject();
   delete obj.password;

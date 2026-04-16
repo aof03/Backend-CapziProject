@@ -2,8 +2,12 @@ const express = require("express");
 const router = express.Router();
 const { param, body, validationResult } = require("express-validator");
 const Ride = require("../models/ride.model");
-const { authenticateToken, onlyDriver } = require("../middleware/auth.middleware");
 const mongoose = require("mongoose");
+
+const {
+  authenticateToken,
+  requireDriver,   // ✅ FIX
+} = require("../middleware/auth.middleware");
 
 /* Helpers */
 const asyncHandler = (fn) => (req, res, next) => {
@@ -24,12 +28,13 @@ const ALLOWED_QR_METHODS = ["promptpay", "qr"];
 router.patch(
   "/confirm-cash/:rideId",
   authenticateToken,
-  onlyDriver,
+  requireDriver, // ✅ FIX
   [param("rideId").isMongoId().withMessage("Invalid rideId")],
   runValidation,
   asyncHandler(async (req, res) => {
     const { rideId } = req.params;
-    const driverId = req.user.userId;
+
+    const driverId = req.user.id; // ✅ FIX
 
     const ride = await Ride.findById(rideId);
     if (!ride) return res.status(404).json({ error: "ไม่พบรายการเดินทาง" });
@@ -60,6 +65,7 @@ router.patch(
 router.post(
   "/generate-qr/:rideId",
   authenticateToken,
+  requireDriver, // (แนะนำให้ fix ด้วย ถ้าเฉพาะ driver สร้าง)
   [
     param("rideId").isMongoId(),
     body("method")
@@ -86,6 +92,7 @@ router.post(
     }
 
     const token = new mongoose.Types.ObjectId();
+
     const paymentLink = `https://fake-payment-provider.local/pay?rideId=${ride._id}&method=${method}&amount=${amount}&token=${token}`;
 
     ride.paymentMethod = method === "promptpay" ? "promptpay" : "qr";
@@ -110,7 +117,8 @@ router.patch(
   runValidation,
   asyncHandler(async (req, res) => {
     const { rideId } = req.params;
-    const userId = req.user.userId;
+
+    const userId = req.user.id; // ✅ FIX
 
     const ride = await Ride.findById(rideId);
     if (!ride) return res.status(404).json({ error: "ไม่พบรายการเดินทาง" });

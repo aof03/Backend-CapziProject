@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { body, query } = require("express-validator");
+const { body, query, param } = require("express-validator");
 
 // Middlewares
 const asyncHandler = require("../middleware/asyncHandler");
@@ -74,8 +74,11 @@ router.patch(
   onlyAdmin,
   [
     body("name").optional().isString(),
-    body("avatar").optional().isString(),
-    body("phone").optional().isString(),
+    body("avatar").optional().isURL().withMessage("avatar must be URL"),
+    body("phone")
+      .optional()
+      .matches(/^[0-9]{8,15}$/)
+      .withMessage("Invalid phone number"),
   ],
   runValidation,
   asyncHandler(adminAuthController.updateProfile)
@@ -110,15 +113,16 @@ router.get(
   asyncHandler(adminKYCController.getAdminList)
 );
 
-// Update Admin Role
+// Update Admin Role ❗ FIX: remove "viewer"
 router.patch(
   "/manage/:adminId/role",
   authenticateToken,
   onlySuperAdmin,
   [
+    param("adminId").isMongoId().withMessage("Invalid adminId"),
     body("role")
       .notEmpty()
-      .isIn(["admin", "super_admin", "viewer"])
+      .isIn(["admin", "super_admin"])
       .withMessage("Invalid role"),
   ],
   runValidation,
@@ -130,6 +134,8 @@ router.patch(
   "/manage/:adminId/suspend",
   authenticateToken,
   onlySuperAdmin,
+  [param("adminId").isMongoId()],
+  runValidation,
   asyncHandler(adminKYCController.suspendAdmin)
 );
 
@@ -138,6 +144,8 @@ router.patch(
   "/manage/:adminId/activate",
   authenticateToken,
   onlySuperAdmin,
+  [param("adminId").isMongoId()],
+  runValidation,
   asyncHandler(adminKYCController.activateAdmin)
 );
 
@@ -158,6 +166,8 @@ router.get(
   "/kyc/driver/:driverId",
   authenticateToken,
   onlyAdmin,
+  [param("driverId").isMongoId()],
+  runValidation,
   asyncHandler(adminKYCController.getDriverKYCDetail)
 );
 
@@ -166,6 +176,8 @@ router.patch(
   "/kyc/driver/:driverId/approve",
   authenticateToken,
   onlyAdmin,
+  [param("driverId").isMongoId()],
+  runValidation,
   asyncHandler(adminKYCController.approveKYC)
 );
 
@@ -175,6 +187,7 @@ router.patch(
   authenticateToken,
   onlyAdmin,
   [
+    param("driverId").isMongoId(),
     body("reason").optional().isString(),
   ],
   runValidation,
@@ -223,6 +236,8 @@ router.patch(
   "/kyc/driver/:driverId/update-docs",
   authenticateToken,
   onlyAdmin,
+  [param("driverId").isMongoId()],
+  runValidation,
   asyncHandler(adminKYCController.updateKycDocuments)
 );
 
@@ -241,6 +256,8 @@ router.patch(
   "/kyc/criminal/:driverId/approve",
   authenticateToken,
   onlyAdmin,
+  [param("driverId").isMongoId()],
+  runValidation,
   asyncHandler(adminKYCController.approveCriminalRecord)
 );
 
@@ -249,6 +266,7 @@ router.patch(
   authenticateToken,
   onlyAdmin,
   [
+    param("driverId").isMongoId(),
     body("reason").optional().isString(),
   ],
   runValidation,
